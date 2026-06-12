@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8" />
+  <title>Distance Matrix – 16 punkti näide</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 0; }
+    #app { display: flex; height: 100vh; }
+    #left { width: 360px; padding: 12px; box-sizing: border-box; overflow-y: auto; border-right: 1px solid #ddd; }
+    #map { flex: 1; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+    th, td { border: 1px solid #ccc; padding: 4px 6px; font-size: 12px; text-align: left; }
+    th { background: #f5f5f5; }
+    input[type="number"] { width: 120px; }
+    .row { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
+    .row label { width: 20px; font-size: 12px; }
+    .btn { margin-top: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+    #status { margin-top: 6px; font-size: 12px; color: #555; }
+    #info { margin-top: 10px; font-size: 13px; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="left">
+    <h3>16 punkti koordinaadid</h3>
+    <p style="font-size:13px;">
+      Sisesta kuni 16 punkti (lat, lng). Seejärel vajuta <b>Lae kaardile</b>.
+      Kaardil markerile klõpsates arvutatakse vahemaad kõigi teiste punktideni.
+    </p>
+
+    <form id="points-form">
+      <!-- 16 rida -->
+      <div id="rows"></div>
+      <button type="button" class="btn" id="load-btn">Lae kaardile</button>
+    </form>
+
+    <div id="status"></div>
+
+    <div id="info">
+      <h4>Valitud punkti vahemaad</h4>
+      <div id="distances-container">
+        <p style="font-size:12px;color:#777;">Klõpsa kaardil markerile, et näha vahemaid.</p>
+      </div>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script>
+  // === KONFIGURATSIOON ===
+  // NB! Asenda siia oma API võti
+  const GOOGLE_MAPS_API_KEY = "YOUR_API_KEY_HERE";
+
+  // Algväärtused (näiteks Tartu ümbrus)
+  const DEFAULT_POINTS = [
+    { lat: 58.3776, lng: 26.7290 },
+    { lat: 58.3800, lng: 26.7220 },
+    { lat: 58.3740, lng: 26.7320 },
+    { lat: 58.3815, lng: 26.7360 }
+    // ülejäänud read jäävad tühjaks, kasutaja saab ise täita
+  ];
+
+  let map;
+  let markers = [];
+  let points = []; // {lat, lng}
+  let distanceMatrixService;
+  let infoWindow;
+
+  // Loome 16 sisestusrea
+  function buildFormRows() {
+    const rowsDiv = document.getElementById("rows");
+    for (let i = 0; i < 16; i++) {
+      const row = document.createElement("div");
+      row.className = "row";
+
+      const label = document.createElement("label");
+      label.textContent = i + 1;
+      row.appendChild(label);
+
+      const latInput = document.createElement("input");
+      latInput.type = "number";
+      latInput.step = "0.000001";
+      latInput.placeholder = "lat";
+      latInput.id = `lat-${i}`;
+      row.appendChild(latInput);
+
+      const lngInput = document.createElement("input");
+      lngInput.type = "number";
+      lngInput.step = "0.000001";
+      lngInput.placeholder = "lng";
+      lngInput.id = `lng-${i}`;
+      row.appendChild(lngInput);
+
+      rowsDiv.appendChild(row);
+    }
+
+    // Täidame mõned algväärtused
+    DEFAULT_POINTS.forEach((p, idx) => {
+      document.getElementById(`lat-${idx}`).value = p.lat;
+      document.getElementById(`lng-${idx}`).value = p.lng;
+    });
+  }
+
+  function readPointsFromForm() {
+    const newPoints = [];
+    for (let i = 0; i < 16; i++) {
+      const latVal = document.getElementById(`lat-${i}`).value;
+      const lngVal = document.getElementById(`lng-${i}`).value;
+      if (latVal !== "" && lngVal !== "") {
+        const lat = parseFloat(latVal);
+        const lng = parseFloat(lngVal);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          newPoints.push({ lat, lng, index: i + 1 });
+        }
+      }
+    }
+    return newPoints;
+  }
+
+  function clearMarkers() {
+    markers.forEach(m => m.setMap(null));
+    markers = [];
+  }
+
+  function renderMarkers() {
+    clearMarkers();
+    if (!points.length) return;
+
+    const bounds = new google.maps.LatLngBounds();
+
+    points.forEach((p, idx) => {
+      const position = { lat: p.lat, lng: p.lng };
+      const marker = new google.maps.Marker({
+        position,
+        map,
+        label: String(idx + 1)
+      });
+
+      marker.addListener("click", () => {
+        onMarkerClick(idx);
+      });
+
+      markers.push(marker);
+      bounds.extend(position);
+    });
+
+    if (!bounds.isEmpty()) {
+      map.fitBounds(bounds);
+    }
+  }
+
+  function setStatus(msg) {
+    document.getElementById("status").textContent = msg || "";
+  }
+
+  function onMarkerClick(originIndex) {
+    if (!points.length) return;
+    if (!distanceMatrixService) {
+      distanceMatrixService = new google.maps.DistanceMatrixService();
+    }
+
+    const origin = points[originIndex];
+    const origins = [new google.maps.LatLng(origin.lat, origin.lng)];
+
+    const destinations = points
+      .map((p, idx) => ({ p, idx }))
+      .filter(obj => obj.idx !== originIndex)
+      .map(obj => new google.maps.LatLng(obj.p.lat, obj.p.lng));
+
+    if (!destinations.length) {
+      renderDistancesTable(originIndex, []);
+      return;
+    }
+
+    setStatus("Arvutan vahemaid…");
+
+    distanceMatrixService.getDistanceMatrix(
+      {
+        origins,
+        destinations,
+        travelMode: google.maps.TravelMode.DRIVING,
+        unitSystem: google.maps.UnitSystem.METRIC
+      },
+      (response, status) => {
+        if (status !== "OK") {
+          console.error("DistanceMatrix error:", status, response);
+          setStatus("Distance Matrix viga: " + status);
+          return;
+        }
+        setStatus("");
+
+        const results = [];
+        const row = response.rows[0];
+        row.elements.forEach((el, i) => {
+          const destPoint = points.filter((_, idx) => idx !== originIndex)[i];
+          if (el.status === "OK") {
+            results.push({
+              index: destPoint.index,
+              lat: destPoint.lat,
+              lng: destPoint.lng,
+              distanceText: el.distance.text,
+              distanceValue: el.distance.value,
+              durationText: el.duration.text,
+              durationValue: el.duration.value
+            });
+          }
+        });
+
+        // sort distance ascending
+        results.sort((a, b) => a.distanceValue - b.distanceValue);
+
+        renderDistancesTable(originIndex, results);
+        showInfoWindow(originIndex, results);
+      }
+    );
+  }
+
+  function renderDistancesTable(originIndex, results) {
+    const container = document.getElementById("distances-container");
+    if (!results.length) {
+      container.innerHTML = "<p style='font-size:12px;color:#777;'>Teisi punkte ei ole või tulemusi ei leitud.</p>";
+      return;
+    }
+
+    const origin = points[originIndex];
+
+    let html = "";
+    html += `<p style="font-size:13px;">Lähtekoht: <b>${origin.index}</b> (${origin.lat.toFixed(6)}, ${origin.lng.toFixed(6)})</p>`;
+    html += "<table>";
+    html += "<thead><tr><th>Punkt</th><th>Koordinaadid</th><th>Kaugus</th><th>Aeg</th></tr></thead><tbody>";
+
+    results.forEach(r => {
+      html += `<tr>
+        <td>${r.index}</td>
+        <td>${r.lat.toFixed(6)}, ${r.lng.toFixed(6)}</td>
+        <td>${r.distanceText}</td>
+        <td>${r.durationText}</td>
+      </tr>`;
+    });
+
+    html += "</tbody></table>";
+    container.innerHTML = html;
+  }
+
+  function showInfoWindow(originIndex, results) {
+    if (!infoWindow) {
+      infoWindow = new google.maps.InfoWindow();
+    }
+    const origin = points[originIndex];
+    const marker = markers[originIndex];
+
+    let content = `<div style="font-size:12px;">
+      <div><b>Punkt ${origin.index}</b><br/>${origin.lat.toFixed(6)}, ${origin.lng.toFixed(6)}</div>
+      <div style="margin-top:4px;"><b>Vahemaad (DRIVING):</b></div>
+      <ul style="padding-left:16px;margin:4px 0;">`;
+
+    results.slice(0, 5).forEach(r => {
+      content += `<li>Punkt ${r.index}: ${r.distanceText}, ${r.durationText}</li>`;
+    });
+
+    if (results.length > 5) {
+      content += `<li>… kokku ${results.length} sihtkohta (vt vasakpoolset tabelit)</li>`;
+    }
+
+    content += "</ul></div>";
+
+    infoWindow.setContent(content);
+    infoWindow.open(map, marker);
+  }
+
+  function initMap() {
+    map = new google.maps.Map(document.getElementById("map"), {
+      center: { lat: 58.3776, lng: 26.7290 },
+      zoom: 13
+    });
+  }
+
+  // Laadime Maps JS API dünaamiliselt (sobib GitHub Pages jaoks)
+  function loadGoogleMapsScript() {
+    const script = document.createElement("script");
+    script.src =
+      "https://maps.googleapis.com/maps/api/js?key=" +
+      encodeURIComponent(GOOGLE_MAPS_API_KEY) +
+      "&callback=onGoogleMapsLoaded";
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  }
+
+  function onGoogleMapsLoaded() {
+    initMap();
+  }
+
+  // Initsialiseerime vormi ja nupud
+  document.addEventListener("DOMContentLoaded", () => {
+    buildFormRows();
+
+    document.getElementById("load-btn").addEventListener("click", () => {
+      const newPoints = readPointsFromForm();
+      if (!newPoints.length) {
+        setStatus("Palun sisesta vähemalt üks punkt.");
+        return;
+      }
+      points = newPoints;
+      setStatus(`Laetud ${points.length} punkti.`);
+      renderMarkers();
+      document.getElementById("distances-container").innerHTML =
+        "<p style='font-size:12px;color:#777;'>Klõpsa kaardil markerile, et näha vahemaid.</p>";
+    });
+
+    loadGoogleMapsScript();
+  });
+
+  // Teeme callbacki globaalseks (Maps API nõue)
+  window.onGoogleMapsLoaded = onGoogleMapsLoaded;
+</script>
+</body>
+</html>
