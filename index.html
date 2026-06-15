@@ -2,132 +2,101 @@
 <html lang="et">
 <head>
   <meta charset="UTF-8" />
-  <title>Distance Matrix – 16 punkti näide</title>
+  <title>PRIA Distance Matrix kaart</title>
   <style>
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
     #app { display: flex; height: 100vh; }
-    #left { width: 360px; padding: 12px; box-sizing: border-box; overflow-y: auto; border-right: 1px solid #ddd; }
+    #left { width: 320px; padding: 12px; box-sizing: border-box; overflow-y: auto; border-right: 1px solid #ddd; }
     #map { flex: 1; }
-    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-    th, td { border: 1px solid #ccc; padding: 4px 6px; font-size: 12px; text-align: left; }
+    .row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+    .row div { font-size: 13px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 4px 6px; font-size: 12px; }
     th { background: #f5f5f5; }
-    input[type="number"] { width: 120px; }
-    .row { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
-    .row label { width: 20px; font-size: 12px; }
-    .btn { margin-top: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+    .btn { margin-top: 10px; padding: 6px 10px; cursor: pointer; }
     #status { margin-top: 6px; font-size: 12px; color: #555; }
-    #info { margin-top: 10px; font-size: 13px; }
   </style>
 </head>
 <body>
+
 <div id="app">
   <div id="left">
-    <h3>16 punkti koordinaadid</h3>
-    <p style="font-size:13px;">
-      Sisesta kuni 16 punkti (lat, lng). Seejärel vajuta <b>Lae kaardile</b>.
-      Kaardil markerile klõpsates arvutatakse vahemaad kõigi teiste punktideni.
-    </p>
+    <h3>PRIA punktid</h3>
+    <p style="font-size:13px;">Punktide nimed on fikseeritud. Klõpsa kaardil markerile, et näha vahemaid.</p>
 
-    <form id="points-form">
-      <!-- 16 rida -->
-      <div id="rows"></div>
-      <button type="button" class="btn" id="load-btn">Lae kaardile</button>
-    </form>
+    <div id="rows"></div>
 
+    <button id="load-btn" class="btn">Lae kaardile</button>
     <div id="status"></div>
 
-    <div id="info">
-      <h4>Valitud punkti vahemaad</h4>
-      <div id="distances-container">
-        <p style="font-size:12px;color:#777;">Klõpsa kaardil markerile, et näha vahemaid.</p>
-      </div>
+    <h4 style="margin-top:20px;">Vahemaad</h4>
+    <div id="distances-container">
+      <p style="font-size:12px;color:#777;">Klõpsa markerile.</p>
     </div>
   </div>
+
   <div id="map"></div>
 </div>
 
 <script>
-  // === KONFIGURATSIOON ===
-  // NB! Asenda siia oma API võti
-  const GOOGLE_MAPS_API_KEY = "AIzaSyABR0wozM-Mt2ZCNa1ZAHOKMfD5KFTqOHM";
-
-  // Algväärtused (näiteks Tartu ümbrus)
+  // === PRIA punktid ===
   const DEFAULT_POINTS = [
-  { name: "REMITK/PRIA",        lat: 58.37324, lng: 26.72591 },
-  { name: "REM",                lat: 59.42701, lng: 24.73941 },
-  { name: "PRIA Harjumaa",      lat: 59.29974, lng: 24.65540 },
-  { name: "PRIA Hiiumaa",       lat: 58.99161, lng: 22.72392 },
-  { name: "PRIA Ida-Virumaa",   lat: 59.35515, lng: 27.42315 },
-  { name: "PRIA Järvamaa",      lat: 58.88607, lng: 25.55690 },
-  { name: "PRIA Jõgevamaa",     lat: 58.74631, lng: 26.39585 },
-  { name: "PRIA Lääne-Virumaa", lat: 59.34886, lng: 26.34648 },
-  { name: "PRIA Läänemaa",      lat: 58.94888, lng: 23.54242 },
-  { name: "PRIA Pärnumaa",      lat: 58.40487, lng: 24.49761 },
-  { name: "PRIA Põlvamaa",      lat: 58.05151, lng: 27.05672 },
-  { name: "PRIA Raplamaa",      lat: 59.00584, lng: 24.79294 },
-  { name: "PRIA Saaremaa",      lat: 58.25434, lng: 22.48521 },
-  { name: "PRIA Valgamaa",      lat: 57.77765, lng: 26.03333 },
-  { name: "PRIA Viljandimaa",   lat: 58.36322, lng: 25.59472 },
-  { name: "PRIA Võrumaa",       lat: 57.84662, lng: 26.99299 }
-];
-
-
+    { name: "REMITK/PRIA",        lat: 58.37324, lng: 26.72591 },
+    { name: "REM",                lat: 59.42701, lng: 24.73941 },
+    { name: "PRIA Harjumaa",      lat: 59.29974, lng: 24.65540 },
+    { name: "PRIA Hiiumaa",       lat: 58.99161, lng: 22.72392 },
+    { name: "PRIA Ida-Virumaa",   lat: 59.35515, lng: 27.42315 },
+    { name: "PRIA Järvamaa",      lat: 58.88607, lng: 25.55690 },
+    { name: "PRIA Jõgevamaa",     lat: 58.74631, lng: 26.39585 },
+    { name: "PRIA Lääne-Virumaa", lat: 59.34886, lng: 26.34648 },
+    { name: "PRIA Läänemaa",      lat: 58.94888, lng: 23.54242 },
+    { name: "PRIA Pärnumaa",      lat: 58.40487, lng: 24.49761 },
+    { name: "PRIA Põlvamaa",      lat: 58.05151, lng: 27.05672 },
+    { name: "PRIA Raplamaa",      lat: 59.00584, lng: 24.79294 },
+    { name: "PRIA Saaremaa",      lat: 58.25434, lng: 22.48521 },
+    { name: "PRIA Valgamaa",      lat: 57.77765, lng: 26.03333 },
+    { name: "PRIA Viljandimaa",   lat: 58.36322, lng: 25.59472 },
+    { name: "PRIA Võrumaa",       lat: 57.84662, lng: 26.99299 }
+  ];
 
   let map;
   let markers = [];
-  let points = []; // {lat, lng}
+  let points = [];
   let distanceMatrixService;
   let infoWindow;
 
-  // Loome 16 sisestusrea
-  function buildFormRows() {
+  // === Kuvame vasakul ainult nimed ===
+  function buildNameList() {
     const rowsDiv = document.getElementById("rows");
-    for (let i = 0; i < 16; i++) {
+    DEFAULT_POINTS.forEach((p, i) => {
       const row = document.createElement("div");
       row.className = "row";
 
-      const label = document.createElement("label");
-      label.textContent = i + 1;
-      row.appendChild(label);
+      const idx = document.createElement("div");
+      idx.textContent = i + 1;
+      idx.style.width = "20px";
 
-      const latInput = document.createElement("input");
-      latInput.type = "number";
-      latInput.step = "0.000001";
-      latInput.placeholder = "lat";
-      latInput.id = `lat-${i}`;
-      row.appendChild(latInput);
+      const name = document.createElement("div");
+      name.textContent = p.name;
 
-      const lngInput = document.createElement("input");
-      lngInput.type = "number";
-      lngInput.step = "0.000001";
-      lngInput.placeholder = "lng";
-      lngInput.id = `lng-${i}`;
-      row.appendChild(lngInput);
-
+      row.appendChild(idx);
+      row.appendChild(name);
       rowsDiv.appendChild(row);
-    }
-
-    // Täidame mõned algväärtused
-    DEFAULT_POINTS.forEach((p, idx) => {
-      document.getElementById(`lat-${idx}`).value = p.lat;
-      document.getElementById(`lng-${idx}`).value = p.lng;
     });
   }
 
-  function readPointsFromForm() {
-    const newPoints = [];
-    for (let i = 0; i < 16; i++) {
-      const latVal = document.getElementById(`lat-${i}`).value;
-      const lngVal = document.getElementById(`lng-${i}`).value;
-      if (latVal !== "" && lngVal !== "") {
-        const lat = parseFloat(latVal);
-        const lng = parseFloat(lngVal);
-        if (!isNaN(lat) && !isNaN(lng)) {
-          newPoints.push({ lat, lng, index: i + 1 });
-        }
-      }
-    }
-    return newPoints;
+  // === Punktid tulevad otse DEFAULT_POINTS massiivist ===
+  function readPoints() {
+    return DEFAULT_POINTS.map((p, idx) => ({
+      name: p.name,
+      lat: p.lat,
+      lng: p.lng,
+      index: idx + 1
+    }));
+  }
+
+  function setStatus(msg) {
+    document.getElementById("status").textContent = msg;
   }
 
   function clearMarkers() {
@@ -137,53 +106,34 @@
 
   function renderMarkers() {
     clearMarkers();
-    if (!points.length) return;
-
     const bounds = new google.maps.LatLngBounds();
 
     points.forEach((p, idx) => {
-      const position = { lat: p.lat, lng: p.lng };
       const marker = new google.maps.Marker({
-        position,
+        position: { lat: p.lat, lng: p.lng },
         map,
-        label: String(idx + 1)
+        label: p.name.substring(0, 1)
       });
 
-      marker.addListener("click", () => {
-        onMarkerClick(idx);
-      });
-
+      marker.addListener("click", () => onMarkerClick(idx));
       markers.push(marker);
-      bounds.extend(position);
+      bounds.extend(marker.getPosition());
     });
 
-    if (!bounds.isEmpty()) {
-      map.fitBounds(bounds);
-    }
-  }
-
-  function setStatus(msg) {
-    document.getElementById("status").textContent = msg || "";
+    map.fitBounds(bounds);
   }
 
   function onMarkerClick(originIndex) {
-    if (!points.length) return;
     if (!distanceMatrixService) {
       distanceMatrixService = new google.maps.DistanceMatrixService();
     }
 
     const origin = points[originIndex];
-    const origins = [new google.maps.LatLng(origin.lat, origin.lng)];
+    const origins = [{ lat: origin.lat, lng: origin.lng }];
 
     const destinations = points
-      .map((p, idx) => ({ p, idx }))
-      .filter(obj => obj.idx !== originIndex)
-      .map(obj => new google.maps.LatLng(obj.p.lat, obj.p.lng));
-
-    if (!destinations.length) {
-      renderDistancesTable(originIndex, []);
-      return;
-    }
+      .filter((_, idx) => idx !== originIndex)
+      .map(p => ({ lat: p.lat, lng: p.lng }));
 
     setStatus("Arvutan vahemaid…");
 
@@ -196,56 +146,44 @@
       },
       (response, status) => {
         if (status !== "OK") {
-          console.error("DistanceMatrix error:", status, response);
-          setStatus("Distance Matrix viga: " + status);
+          setStatus("Viga: " + status);
           return;
         }
+
         setStatus("");
 
         const results = [];
         const row = response.rows[0];
+
         row.elements.forEach((el, i) => {
-          const destPoint = points.filter((_, idx) => idx !== originIndex)[i];
+          const dest = points.filter((_, idx) => idx !== originIndex)[i];
           if (el.status === "OK") {
             results.push({
-              index: destPoint.index,
-              lat: destPoint.lat,
-              lng: destPoint.lng,
+              name: dest.name,
               distanceText: el.distance.text,
-              distanceValue: el.distance.value,
               durationText: el.duration.text,
-              durationValue: el.duration.value
+              distanceValue: el.distance.value
             });
           }
         });
 
-        // sort distance ascending
         results.sort((a, b) => a.distanceValue - b.distanceValue);
 
-        renderDistancesTable(originIndex, results);
-        showInfoWindow(originIndex, results);
+        renderDistancesTable(origin, results);
+        showInfoWindow(origin, results);
       }
     );
   }
 
-  function renderDistancesTable(originIndex, results) {
+  function renderDistancesTable(origin, results) {
     const container = document.getElementById("distances-container");
-    if (!results.length) {
-      container.innerHTML = "<p style='font-size:12px;color:#777;'>Teisi punkte ei ole või tulemusi ei leitud.</p>";
-      return;
-    }
 
-    const origin = points[originIndex];
-
-    let html = "";
-    html += `<p style="font-size:13px;">Lähtekoht: <b>${origin.index}</b> (${origin.lat.toFixed(6)}, ${origin.lng.toFixed(6)})</p>`;
-    html += "<table>";
-    html += "<thead><tr><th>Punkt</th><th>Koordinaadid</th><th>Kaugus</th><th>Aeg</th></tr></thead><tbody>";
+    let html = `<p><b>${origin.name}</b></p>`;
+    html += "<table><thead><tr><th>Punkt</th><th>Kaugus</th><th>Aeg</th></tr></thead><tbody>";
 
     results.forEach(r => {
       html += `<tr>
-        <td>${r.index}</td>
-        <td>${r.lat.toFixed(6)}, ${r.lng.toFixed(6)}</td>
+        <td>${r.name}</td>
         <td>${r.distanceText}</td>
         <td>${r.durationText}</td>
       </tr>`;
@@ -255,46 +193,35 @@
     container.innerHTML = html;
   }
 
-  function showInfoWindow(originIndex, results) {
-    if (!infoWindow) {
-      infoWindow = new google.maps.InfoWindow();
-    }
-    const origin = points[originIndex];
-    const marker = markers[originIndex];
+  function showInfoWindow(origin, results) {
+    if (!infoWindow) infoWindow = new google.maps.InfoWindow();
 
     let content = `<div style="font-size:12px;">
-      <div><b>Punkt ${origin.index}</b><br/>${origin.lat.toFixed(6)}, ${origin.lng.toFixed(6)}</div>
-      <div style="margin-top:4px;"><b>Vahemaad (DRIVING):</b></div>
-      <ul style="padding-left:16px;margin:4px 0;">`;
+      <b>${origin.name}</b>
+      <div style="margin-top:6px;"><b>Lähimad punktid:</b></div>
+      <ul style="padding-left:16px;">`;
 
     results.slice(0, 5).forEach(r => {
-      content += `<li>Punkt ${r.index}: ${r.distanceText}, ${r.durationText}</li>`;
+      content += `<li>${r.name}: ${r.distanceText}, ${r.durationText}</li>`;
     });
-
-    if (results.length > 5) {
-      content += `<li>… kokku ${results.length} sihtkohta (vt vasakpoolset tabelit)</li>`;
-    }
 
     content += "</ul></div>";
 
     infoWindow.setContent(content);
-    infoWindow.open(map, marker);
+    infoWindow.open(map, markers[origin.index - 1]);
   }
 
   function initMap() {
     map = new google.maps.Map(document.getElementById("map"), {
-      center: { lat: 58.3776, lng: 26.7290 },
-      zoom: 13
+      center: { lat: 58.7, lng: 25.0 },
+      zoom: 7
     });
   }
 
-  // Laadime Maps JS API dünaamiliselt (sobib GitHub Pages jaoks)
   function loadGoogleMapsScript() {
     const script = document.createElement("script");
     script.src =
-      "https://maps.googleapis.com/maps/api/js?key=" +
-      encodeURIComponent(GOOGLE_MAPS_API_KEY) +
-      "&callback=onGoogleMapsLoaded";
+      "https://maps.googleapis.com/maps/api/js?key=AIzaSyABR0wozM-Mt2ZCNa1ZAHOKMfD5KFTqOHM&callback=onGoogleMapsLoaded";
     script.async = true;
     script.defer = true;
     document.head.appendChild(script);
@@ -304,28 +231,20 @@
     initMap();
   }
 
-  // Initsialiseerime vormi ja nupud
+  window.onGoogleMapsLoaded = onGoogleMapsLoaded;
+
   document.addEventListener("DOMContentLoaded", () => {
-    buildFormRows();
+    buildNameList();
 
     document.getElementById("load-btn").addEventListener("click", () => {
-      const newPoints = readPointsFromForm();
-      if (!newPoints.length) {
-        setStatus("Palun sisesta vähemalt üks punkt.");
-        return;
-      }
-      points = newPoints;
-      setStatus(`Laetud ${points.length} punkti.`);
+      points = readPoints();
       renderMarkers();
-      document.getElementById("distances-container").innerHTML =
-        "<p style='font-size:12px;color:#777;'>Klõpsa kaardil markerile, et näha vahemaid.</p>";
+      setStatus("Punktid laetud.");
     });
 
     loadGoogleMapsScript();
   });
-
-  // Teeme callbacki globaalseks (Maps API nõue)
-  window.onGoogleMapsLoaded = onGoogleMapsLoaded;
 </script>
+
 </body>
 </html>
