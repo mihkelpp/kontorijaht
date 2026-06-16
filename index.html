@@ -21,18 +21,18 @@
 
 <div id="app">
   <div id="left">
-    <h2>Kontorijaht!</h2>
-    <h4>PRIA ja REM kontorid</h4>
-    <p style="font-size:13px;">Klõpsa kaardil markerile, et näha vahemaid.</p>
+    <h3>PRIA punktid</h3>
+    <p style="font-size:13px;">Klõpsa kaardil markerile.  
+    <br><b>Ainult REMITK/PRIA</b> kuvab distantsid.</p>
 
     <div id="rows"></div>
 
     <button id="load-btn" class="btn">Lae kaardile</button>
     <div id="status"></div>
 
-    <h4 style="margin-top:20px;">Vahemaad kontorite vahel</h4>
+    <h4 style="margin-top:20px;">Vahemaad</h4>
     <div id="distances-container">
-      <p style="font-size:12px;color:#777;">Klõpsa markerile.</p>
+      <p style="font-size:12px;color:#777;">Klõpsa REMITK/PRIA markerile.</p>
     </div>
   </div>
 
@@ -86,7 +86,6 @@
     });
   }
 
-  // === Punktid tulevad otse DEFAULT_POINTS massiivist ===
   function readPoints() {
     return DEFAULT_POINTS.map((p, idx) => ({
       name: p.name,
@@ -124,14 +123,24 @@
     map.fitBounds(bounds);
   }
 
+  // === OLULINE MUUDATUS: ainult REMITK/PRIA kuvab distantsid ===
   function onMarkerClick(originIndex) {
+    const origin = points[originIndex];
+
+    // Kui pole REMITK/PRIA → ainult nimi
+    if (origin.name !== "REMITK/PRIA") {
+      showNameOnly(origin, originIndex);
+      document.getElementById("distances-container").innerHTML =
+        "<p style='font-size:12px;color:#777;'>Distantsid kuvatakse ainult REMITK/PRIA jaoks.</p>";
+      return;
+    }
+
+    // Kui on REMITK/PRIA → arvutame distantsid
     if (!distanceMatrixService) {
       distanceMatrixService = new google.maps.DistanceMatrixService();
     }
 
-    const origin = points[originIndex];
     const origins = [{ lat: origin.lat, lng: origin.lng }];
-
     const destinations = points
       .filter((_, idx) => idx !== originIndex)
       .map(p => ({ lat: p.lat, lng: p.lng }));
@@ -171,9 +180,15 @@
         results.sort((a, b) => a.distanceValue - b.distanceValue);
 
         renderDistancesTable(origin, results);
-        showInfoWindow(origin, results);
+        showInfoWindow(origin, results, originIndex);
       }
     );
+  }
+
+  function showNameOnly(origin, index) {
+    if (!infoWindow) infoWindow = new google.maps.InfoWindow();
+    infoWindow.setContent(`<b>${origin.name}</b>`);
+    infoWindow.open(map, markers[index]);
   }
 
   function renderDistancesTable(origin, results) {
@@ -194,7 +209,7 @@
     container.innerHTML = html;
   }
 
-  function showInfoWindow(origin, results) {
+  function showInfoWindow(origin, results, index) {
     if (!infoWindow) infoWindow = new google.maps.InfoWindow();
 
     let content = `<div style="font-size:12px;">
@@ -209,7 +224,7 @@
     content += "</ul></div>";
 
     infoWindow.setContent(content);
-    infoWindow.open(map, markers[origin.index - 1]);
+    infoWindow.open(map, markers[index]);
   }
 
   function initMap() {
